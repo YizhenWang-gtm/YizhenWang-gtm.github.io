@@ -15,6 +15,12 @@
       "nav": "n8n接入",
       "title": "《n8n 自动化工作流接入 Claude 中转 API 实战》 | KingFlow",
       "desc": "《n8n 自动化工作流接入 Claude 中转 API 实战》。KingFlow 国内直连、一个 Key 多模型、人民币充值、倍率透明，改一行 Base URL 即可接入。"
+    },
+    {
+      "slug": "claude-sonnet-proxy-review",
+      "nav": "Sonnet测评",
+      "title": "《Claude Sonnet 4.6 中转体验测评：均衡之选》 | KingFlow",
+      "desc": "《Claude Sonnet 4.6 中转体验测评：均衡之选》。KingFlow 国内直连、一个 Key 多模型、人民币充值、倍率透明，改一行 Base URL 即可接入。"
     }
   ]
 }
