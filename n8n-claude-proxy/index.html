@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>《n8n 自动化工作流接入 Claude 中转 API 实战》 | KingFlow</title>
+<meta name="description" content="《n8n 自动化工作流接入 Claude 中转 API 实战》。KingFlow 国内直连、一个 Key 多模型、人民币充值、倍率透明，改一行 Base URL 即可接入。">
+<link rel="canonical" href="https://YizhenWang-gtm.github.io/n8n-claude-proxy/">
+<meta name="robots" content="index,follow">
+<meta property="og:type" content="website">
+<meta property="og:title" content="《n8n 自动化工作流接入 Claude 中转 API 实战》 | KingFlow">
+<meta property="og:description" content="《n8n 自动化工作流接入 Claude 中转 API 实战》。KingFlow 国内直连、一个 Key 多模型、人民币充值、倍率透明，改一行 Base URL 即可接入。">
+<meta property="og:url" content="https://YizhenWang-gtm.github.io/n8n-claude-proxy/">
+<meta property="og:site_name" content="KingFlow">
+<meta property="og:image" content="https://www.kingflow.ai/logo.png">
+<meta name="twitter:card" content="summary">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<header class="site-header">
+  <a class="brand" href="/">King<span>Flow</span></a>
+  <nav class="topnav"><a href="/">首页</a>
+<a href="/n8n-claude-proxy/" class="active">n8n接入</a></nav>
+  <a class="cta" href="https://www.kingflow.ai" rel="noopener">前往官网 →</a>
+</header>
+<main>
+<article class="post">
+<h1>《n8n 自动化工作流接入 Claude 中转 API 实战》</h1>
+<div align="center">
+<h3>KingFlow · 国内直连 AI API 中转</h3>
+<a href="https://www.kingflow.ai"><img src="https://img.shields.io/badge/官网-www.kingflow.ai-FF6B35" alt="KingFlow"></a>
+</div>
+
+<p>我们组前段时间把一堆重复的运营杂活搬到了 n8n 上，从收到客户邮件、解析表单提交，到自动生成回复草稿、分类打标签，全都串成了自动化流程。中间调 LLM 的那几个节点，一开始直连 Anthropic 官方，跑着跑着就出问题——不是节点超时报红，就是月底账单对不上。后来换成了走中转，整条流水线才真正稳下来。这篇就把 n8n 接入 Claude 中转的完整做法记一下，包括节点配置、几个实战工作流示例，以及为什么在自动化场景里中转比直连更合适。</p>
+<h2>一、n8n 是什么，AI 节点为什么建议配中转</h2>
+<p>n8n 是一个开源的工作流自动化工具，你可以把它理解成"可视化的 if-this-then-that，但能力强得多"。它用节点(Node)把各种服务连起来：一个触发器节点(Webhook、定时器、邮箱新邮件)启动流程，中间一串处理节点做数据加工，最后写回数据库、发消息、更新表格。整个流程画在画布上，不用写胶水代码。</p>
+<p>n8n 内置了 AI 相关节点(OpenAI 节点、AI Agent、以及最通用的 HTTP Request 节点)，让你在工作流里直接调大模型。问题在于：自动化场景对 LLM 调用的要求，和你手动在对话框里聊天完全不同。</p>
+<ul>
+<li><strong>稳定性敏感</strong>：工作流是无人值守跑的。你半夜收到 200 封邮件，n8n 挨个触发 AI 节点。只要有几次连接超时或者 429 限流，这批任务就带着红色错误躺在执行历史里，等你早上起来手动重跑。直连官方在国内网络下，首字延迟经常飙到几十秒，节点很容易撞上超时阈值。</li>
+<li><strong>成本敏感</strong>：自动化最容易失控的就是量。一个跑得欢的工作流，一天调几千上万次 LLM 很正常。这时候每次调用是走贵模型还是便宜模型、缓存有没有命中，直接决定月底账单是三位数还是四位数。</li>
+<li><strong>对账需求</strong>：流程一多，你会想知道到底是哪个工作流、哪个节点在烧钱。直连官方那点账单信息很难拆到这个粒度。</li>
+</ul>
+<p>中转 API 恰好补上这三块。以 KingFlow 为例，它走官方 <code>/v1/messages</code> 协议做转发(不是逆向反代那种脆弱方案)，国内节点直连让首字延迟通常压在 1-3 秒，节点不容易超时；一个 Key 就能在多个模型间切换，方便按节点分档控成本；后台还能查到每次调用的 token 用量和明细，对账时能落到具体流程。</p>
+<h2>二、在 n8n 里接入：改一处 Base URL 就行</h2>
+<p>n8n 接 Claude 中转有两条路：用 OpenAI 兼容节点，或者用最灵活的 HTTP Request 节点。核心就一句话——把请求地址指向中转端点，填上 Key，选好模型。</p>
+<h3>方式一：OpenAI 节点(兼容协议，最省事)</h3>
+<p>n8n 的 OpenAI 节点允许自定义 Base URL。在 Credentials 里新建一个 OpenAI 凭据：</p>
+<ul>
+<li><strong>Base URL</strong>：<code>https://www.kingflow.ai/v1</code></li>
+<li><strong>API Key</strong>：你在 KingFlow 后台拿到的 Key</li>
+<li>节点里 <strong>Model</strong> 填 <code>claude-sonnet-4-6</code></li>
+</ul>
+<p>这样这个节点发出的请求就走中转了，其余用法和原生 OpenAI 节点一模一样。日常处理任务用 <code>claude-sonnet-4-6</code> 均衡够用；批量、高频的轻活可以换成 <code>claude-haiku-4-5</code> 省钱；遇到需要复杂推理、长文重构的场景再上 <code>claude-opus-4-8</code>。</p>
+<h3>方式二：HTTP Request 节点(最灵活，走原生 Claude 协议)</h3>
+<p>如果你想用 Anthropic 原生的 messages 接口，或者要精细控制参数，直接上 HTTP Request 节点：</p>
+<ul>
+<li><strong>Method</strong>：POST</li>
+<li><strong>URL</strong>：<code>https://www.kingflow.ai/v1/messages</code></li>
+<li><strong>Headers</strong>：</li>
+<li><code>x-api-key</code>：你的 KingFlow Key</li>
+<li><code>anthropic-version</code>：<code>2023-06-01</code></li>
+<li><code>content-type</code>：<code>application/json</code></li>
+<li><strong>Body</strong>(JSON)：</li>
+</ul>
+<pre><code class="language-json">{
+  &quot;model&quot;: &quot;claude-sonnet-4-6&quot;,
+  &quot;max_tokens&quot;: 1024,
+  &quot;messages&quot;: [
+    { &quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;={{ $json.emailBody }}&quot; }
+  ]
+}
+</code></pre>
+<p>这里 <code>={{ $json.emailBody }}</code> 是 n8n 的表达式语法，把上游节点传来的字段(比如邮件正文)动态塞进请求里。返回结果同样是标准 Claude 响应结构，后面接个 Set 节点或 Code 节点解析 <code>content[0].text</code> 就能拿到生成内容。</p>
+<p>想快速验证凭据通不通，可以先在终端 cURL 一把：</p>
+<pre><code class="language-bash">curl https://www.kingflow.ai/v1/messages \
+  -H &quot;x-api-key: $YOUR_KEY&quot; \
+  -H &quot;anthropic-version: 2023-06-01&quot; \
+  -H &quot;content-type: application/json&quot; \
+  -d '{
+    &quot;model&quot;: &quot;claude-sonnet-4-6&quot;,
+    &quot;max_tokens&quot;: 256,
+    &quot;messages&quot;: [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;回复：连通性测试成功&quot;}]
+  }'
+</code></pre>
+<p>能正常返回，n8n 那边填一样的地址和 Key 就没问题了。</p>
+<h2>三、一个典型工作流：表单/邮件 → Claude 处理 → 回写</h2>
+<p>讲配置太干，看个真跑起来的流程更直观。我们有一条"客户咨询自动分类+草拟回复"的工作流，长这样：</p>
+<ol>
+<li><strong>触发器节点</strong>：IMAP Email 节点监听客服邮箱，或者 Webhook 节点接住网站表单提交。新邮件/新表单一到，流程启动。</li>
+<li><strong>数据整理节点</strong>：用 Set 节点把发件人、主题、正文抽成干净字段，方便后面引用。</li>
+<li><strong>AI 处理节点</strong>(HTTP Request 指向中转)：把邮件正文喂给 <code>claude-sonnet-4-6</code>，prompt 里要求它做两件事——判断咨询类别(售前/售后/投诉/其它)，并起草一段专业得体的回复。让它按 JSON 结构返回，便于机器解析。</li>
+<li><strong>解析节点</strong>：Code 节点解出分类标签和回复草稿。</li>
+<li><strong>分支节点</strong>：Switch 节点按分类走不同分支——投诉类直接 @ 负责人到群里,一般咨询进草稿箱。</li>
+<li><strong>回写节点</strong>：把分类结果写回 CRM 或 Notion 数据库，草稿回复存进邮件系统等人工过目后发送。</li>
+</ol>
+<p>这条流程无人值守跑，人只在最后审一眼草稿。上线后客服响应时间明显缩短，重复劳动砍掉一大截。关键在于第 3 步——它一天要被触发几百次，稳定性和成本全压在这个 AI 节点上。走中转之后，超时报红几乎绝迹，账单也能预估了。</p>
+<h2>四、多模型分档，把成本压下来</h2>
+<p>自动化工作流最容易在 LLM 上超支，因为量大且无人盯着。中转"一个 Key 多模型"的好处，就是你能给每个节点按需求配不同档位的模型，改一下 <code>model</code> 参数就切换，不用维护多套凭据。我们的分档大致是：</p>
+<ul>
+<li><strong>高频轻活</strong>(打标签、判断意图、格式化)：<code>claude-haiku-4-5</code>。这类调用量最大，用低成本模型效果也够。</li>
+<li><strong>日常主力</strong>(草拟回复、内容摘要、信息抽取)：<code>claude-sonnet-4-6</code>。质量和成本平衡得最好，大部分节点用它。</li>
+<li><strong>重活</strong>(长文档分析、复杂多步推理、代码重构)：<code>claude-opus-4-8</code>。只在真需要的少数节点上用，单次贵但触发次数少。</li>
+</ul>
+<p>除了 Claude 系，中转通常还能路由到别的模型(gpt-5.5、deepseek-v4、glm-5.1 之类)，某个模型偶发不可用时也好切换兜底。分档做完，配合中转对 Prompt Cache 的透传——重复的系统提示部分能命中缓存，输入侧成本还能再降一截——整条流水线的月度花费我这边实测降了不少。</p>
+<h2>五、为什么用 KingFlow</h2>
+<p>在自动化这个场景里，我最后留下 KingFlow 主要看重几点：</p>
+<ul>
+<li><strong>国内直连、延迟稳</strong>：国内节点，首字延迟通常 1-3 秒。这对 n8n 太重要了，节点不容易撞超时，工作流执行历史里的红叉少了很多。之前直连官方或挂代理，高频长连接跑着跑着就 403/429，一批任务集体失败。</li>
+<li><strong>一个 Key 管所有模型</strong>：多档分级不用维护多套 Key，n8n 里凭据配一次，各节点改 <code>model</code> 就切。</li>
+<li><strong>后台能对账</strong>：每个 Key 的调用明细、token 用量、余额都查得到。我给不同项目的工作流配不同子 Key，月底一看就知道钱花在哪条流程上，出问题也好定位。</li>
+<li><strong>走官方协议、不掉包</strong>：转发基于官方 messages 协议而非逆向，Anthropic 更新时不容易突然挂掉；模型也是老实转发，不拿小模型冒充大模型。</li>
+<li><strong>人民币小额充值、先测后充</strong>：新人注册送额度，可以先把工作流跑通、看看实际消耗，再决定充多少，不用一上来压一大笔。</li>
+</ul>
+<h2>六、FAQ</h2>
+<p><strong>Q1：n8n 用 OpenAI 节点接 Claude 中转，能正常收到回复吗？</strong>
+可以。OpenAI 节点支持自定义 Base URL，填 <code>https://www.kingflow.ai/v1</code> 加 Key，Model 写 <code>claude-sonnet-4-6</code> 即可。中转做了协议兼容，节点按标准流程解析响应，不用改工作流其余部分。想用原生 Claude messages 接口就换 HTTP Request 节点。</p>
+<p><strong>Q2：工作流里 AI 节点偶尔报超时红叉，是中转的问题吗？</strong>
+大多数超时其实是网络延迟撞上了节点默认的超时阈值。国内直连中转把首字延迟压到 1-3 秒后，这类红叉会大幅减少。此外建议在节点上开启重试(n8n 节点设置里有 Retry On Fail)，给无人值守流程多一层兜底。</p>
+<p><strong>Q3：怎么控制自动化跑起来后的成本？</strong>
+按节点分档用模型：高频轻活用 <code>claude-haiku-4-5</code>，日常用 <code>claude-sonnet-4-6</code>，重活才上 <code>claude-opus-4-8</code>。中转一个 Key 就能切模型，改 <code>model</code> 参数即可。再配合后台的用量明细定期看看哪条工作流最费钱，针对性优化。</p>
+<p><strong>Q4：多个工作流/项目想分开算账怎么办？</strong>
+在 KingFlow 后台建多个子 Key，一个项目一个 Key，n8n 里对应工作流用各自的凭据。后台按 Key 统计用量和调用明细，月底导出就能把成本拆到项目粒度，报销对账都清楚，具体以后台功能为准。</p>
+</article>
+</main>
+<footer class="site-footer">
+  <p><strong>KingFlow</strong> · 国内直连、稳定低延迟的 Claude / GPT API 中转平台</p>
+  <p>官网：<a href="https://www.kingflow.ai" rel="noopener">www.kingflow.ai</a> ｜ 支持 Claude Code · OpenAI Codex · 全系 Claude / GPT 模型</p>
+  <p class="muted">© 2026 KingFlow. 本站为 KingFlow 中转方案与配置教程合集。</p>
+</footer>
+</body>
+</html>
